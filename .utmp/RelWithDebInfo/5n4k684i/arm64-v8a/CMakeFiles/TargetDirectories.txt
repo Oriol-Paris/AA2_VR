@@ -1,0 +1,5 @@
+C:/Users/OriolParisFont/Desktop/repo vr/AA2_VR/.utmp/RelWithDebInfo/5n4k684i/arm64-v8a/CMakeFiles/edit_cache.dir
+C:/Users/OriolParisFont/Desktop/repo vr/AA2_VR/.utmp/RelWithDebInfo/5n4k684i/arm64-v8a/CMakeFiles/rebuild_cache.dir
+C:/Users/OriolParisFont/Desktop/repo vr/AA2_VR/.utmp/RelWithDebInfo/5n4k684i/arm64-v8a/GameActivity/CMakeFiles/game.dir
+C:/Users/OriolParisFont/Desktop/repo vr/AA2_VR/.utmp/RelWithDebInfo/5n4k684i/arm64-v8a/GameActivity/CMakeFiles/edit_cache.dir
+C:/Users/OriolParisFont/Desktop/repo vr/AA2_VR/.utmp/RelWithDebInfo/5n4k684i/arm64-v8a/GameActivity/CMakeFiles/rebuild_cache.dir
