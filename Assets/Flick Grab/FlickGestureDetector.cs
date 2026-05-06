@@ -3,13 +3,16 @@ using UnityEngine;
 
 namespace FlickGrab
 {
+    /// <summary>
+    /// Detects a quick "flick" or "snap" motion towards the player.
+    /// </summary>
     public class FlickGestureDetector : MonoBehaviour
     {
         [Header("Settings")]
         [Tooltip("Minimum velocity towards the user to trigger the flick.")]
-        [SerializeField] private float velocityThreshold = 1.5f;
+        [SerializeField] private float velocityThreshold = 1.0f;
         [Tooltip("Minimum acceleration to trigger the flick.")]
-        [SerializeField] private float accelerationThreshold = 5f;
+        [SerializeField] private float accelerationThreshold = 4.0f;
         [SerializeField, Range(2, 10)] private int samples = 5;
 
         private Queue<Vector3> velocityHistory = new Queue<Vector3>();
@@ -40,20 +43,16 @@ namespace FlickGrab
 
         public bool IsFlicking()
         {
-            // A flick is a sudden movement in the opposite direction of the forward vector (pulling back)
-            // We use the detector's transform (the controller) for the forward vector.
+            // We use the world space velocity but compare it against the direction from the hand to the player
+            // For simplicity, we assume pulling "back" relative to the controller's forward is what we want.
+            // In a more robust system, we might use the vector to the HMD.
+            
             float pullStrength = Vector3.Dot(averageVelocity, -transform.forward);
             
-            // Check acceleration (change in velocity)
             Vector3 acceleration = (averageVelocity - lastAverageVelocity) / Time.deltaTime;
             float pullAcceleration = Vector3.Dot(acceleration, -transform.forward);
 
-            bool success = pullStrength > velocityThreshold && pullAcceleration > accelerationThreshold;
-            if (success) Debug.Log($"[FlickGrab] Flick detected! Strength: {pullStrength:F2}, Accel: {pullAcceleration:F2}");
-            
-            return success;
+            return pullStrength > velocityThreshold && pullAcceleration > accelerationThreshold;
         }
-        
-        public Vector3 GetVelocity() => averageVelocity;
     }
 }

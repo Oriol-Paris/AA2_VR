@@ -6,6 +6,9 @@ using UnityEngine.XR.Interaction.Toolkit.Interactables;
 
 namespace FlickGrab
 {
+    /// <summary>
+    /// Manages the flick interaction from the hand.
+    /// </summary>
     public class FlickGrabInteractor : MonoBehaviour
     {
         [Header("XRI References")]
@@ -16,29 +19,28 @@ namespace FlickGrab
         [Header("Input")]
         [SerializeField] private InputActionReference activateAction;
 
-        [Header("Raycast Settings")]
+        [Header("Settings")]
         [SerializeField] private float maxDistance = 10f;
-        [SerializeField] private LayerMask layerMask = ~0;
+        [SerializeField] private LayerMask layerMask = -1;
 
         [Header("Components")]
         [SerializeField] private FlickGestureDetector gestureDetector;
-        
-        [Header("Visuals")]
         [SerializeField] private LineRenderer beamLine;
 
         private FlickGrabbable currentTarget;
-        private FlickGrabbable lastValidTarget;
         private bool isButtonHeld;
-        private float cooldownTimer;
-        private const float CooldownTime = 0.5f;
 
         private void OnEnable()
         {
             if (activateAction != null)
             {
                 activateAction.action.Enable();
-                activateAction.action.performed += _ => isButtonHeld = true;
-                activateAction.action.canceled += _ => { isButtonHeld = false; ClearTarget(); };
+                activateAction.action.performed += OnButtonPressed;
+                activateAction.action.canceled += OnButtonReleased;
+            }
+            else
+            {
+                Debug.LogWarning("[FlickGrab] Activate Action is not assigned on FlickGrabInteractor!");
             }
         }
 
@@ -46,17 +48,28 @@ namespace FlickGrab
         {
             if (activateAction != null)
             {
-                activateAction.action.performed -= _ => isButtonHeld = true;
-                activateAction.action.canceled -= _ => { isButtonHeld = false; ClearTarget(); };
+                activateAction.action.performed -= OnButtonPressed;
+                activateAction.action.canceled -= OnButtonReleased;
             }
+        }
+
+        private void OnButtonPressed(InputAction.CallbackContext context)
+        {
+            isButtonHeld = true;
+            Debug.Log("[FlickGrab] Button Pressed");
+        }
+
+        private void OnButtonReleased(InputAction.CallbackContext context)
+        {
+            isButtonHeld = false;
+            Debug.Log("[FlickGrab] Button Released");
         }
 
         private void Update()
         {
-            if (cooldownTimer > 0) cooldownTimer -= Time.deltaTime;
-
             if (!isButtonHeld)
             {
+                if (currentTarget != null) Debug.Log("[FlickGrab] Button released, clearing target.");
                 ClearTarget();
                 UpdateBeam(false, Vector3.zero);
                 return;
@@ -64,10 +77,11 @@ namespace FlickGrab
 
             PerformRaycast();
 
-            if (lastValidTarget != null && !lastValidTarget.IsFlying && cooldownTimer <= 0)
+            if (currentTarget != null && !currentTarget.IsFlying)
             {
-                if (gestureDetector.IsFlicking())
+                if (gestureDetector != null && gestureDetector.IsFlicking())
                 {
+                    Debug.Log("[FlickGrab] Flick gesture detected!");
                     TriggerFlick();
                 }
             }
@@ -75,6 +89,7 @@ namespace FlickGrab
 
         private void PerformRaycast()
         {
+            // Use the interactor's forward as the ray direction
             Ray ray = new Ray(transform.position, transform.forward);
             if (Physics.Raycast(ray, out RaycastHit hit, maxDistance, layerMask))
             {
@@ -83,10 +98,9 @@ namespace FlickGrab
                 {
                     if (currentTarget != grabbable)
                     {
-                        Debug.Log($"[FlickGrab] Raycast hit: {grabbable.name}");
+                        Debug.Log($"[FlickGrab] Raycast hit new target: {grabbable.name}");
                         ClearTarget();
                         currentTarget = grabbable;
-                        lastValidTarget = grabbable;
                         currentTarget.SetHighlight(true);
                     }
                     UpdateBeam(true, hit.point);
@@ -94,27 +108,28 @@ namespace FlickGrab
                 }
             }
 
-            ClearTarget();
+            if (currentTarget != null)
+            {
+                Debug.Log("[FlickGrab] Raycast lost target.");
+                ClearTarget();
+            }
             UpdateBeam(false, Vector3.zero);
         }
 
         private void TriggerFlick()
         {
-            if (lastValidTarget == null) return;
+            if (currentTarget == null) return;
 
-            lastValidTarget.OnArrived -= HandleObjectArrival;
-            lastValidTarget.OnArrived += HandleObjectArrival;
+            FlickGrabbable launchingTarget = currentTarget;
+            launchingTarget.OnArrived += HandleArrival;
+            launchingTarget.Launch(handAnchor != null ? handAnchor : transform);
             
-            lastValidTarget.Launch(handAnchor != null ? handAnchor : transform);
-            
-            cooldownTimer = CooldownTime;
             ClearTarget();
-            lastValidTarget = null;
         }
 
-        private void HandleObjectArrival(FlickGrabbable grabbable)
+        private void HandleArrival(FlickGrabbable grabbable)
         {
-            grabbable.OnArrived -= HandleObjectArrival;
+            grabbable.OnArrived -= HandleArrival;
 
             if (directInteractor != null)
             {
