@@ -34,6 +34,9 @@ namespace FlickGrab
             propBlock = new MaterialPropertyBlock();
             
             grabInteractable.selectEntered.AddListener(OnSelected);
+            
+            // Log if we have renderers
+            Debug.Log($"[FlickGrab] {name} initialized with {renderers.Length} renderers.");
         }
 
         private void OnDestroy()
@@ -46,21 +49,56 @@ namespace FlickGrab
 
         public void SetHighlight(bool active)
         {
-            // Simple emission toggle
-            Color color = active ? highlightColor * 2f : Color.black;
+            if (renderers == null || renderers.Length == 0)
+            {
+                renderers = GetComponentsInChildren<Renderer>();
+                if (renderers == null || renderers.Length == 0) return;
+            }
+
+            float intensity = active ? 4.0f : 0f;
+            Color color = highlightColor * intensity;
+            
             foreach (var r in renderers)
             {
                 if (r == null) continue;
                 r.GetPropertyBlock(propBlock);
-                propBlock.SetColor("_EmissionColor", color);
-                r.SetPropertyBlock(propBlock);
                 
-                // Ensure emission keyword is enabled on the material if needed
+                propBlock.SetColor("_EmissionColor", color);
+                
                 if (active)
                 {
-                    foreach (var mat in r.materials)
+                    propBlock.SetColor("_BaseColor", highlightColor);
+                    propBlock.SetColor("_Color", highlightColor);
+                }
+                else
+                {
+                    propBlock.SetColor("_BaseColor", Color.white);
+                    propBlock.SetColor("_Color", Color.white);
+                }
+
+                r.SetPropertyBlock(propBlock);
+                
+                foreach (var mat in r.materials)
+                {
+                    if (active)
                     {
-                        mat.EnableKeyword("_EMISSION");
+                        if (mat.HasProperty("_EmissionColor"))
+                        {
+                            mat.EnableKeyword("_EMISSION");
+                            mat.SetColor("_EmissionColor", color);
+                        }
+                        if (mat.HasProperty("_BaseColor")) mat.SetColor("_BaseColor", highlightColor);
+                        else if (mat.HasProperty("_Color")) mat.SetColor("_Color", highlightColor);
+                    }
+                    else
+                    {
+                        if (mat.HasProperty("_EmissionColor"))
+                        {
+                            mat.DisableKeyword("_EMISSION");
+                            mat.SetColor("_EmissionColor", Color.black);
+                        }
+                        if (mat.HasProperty("_BaseColor")) mat.SetColor("_BaseColor", Color.white);
+                        else if (mat.HasProperty("_Color")) mat.SetColor("_Color", Color.white);
                     }
                 }
             }

@@ -5,13 +5,55 @@ namespace FlickGrab
 {
     public class FlickGrabAutoSpawner : MonoBehaviour
     {
-        [SerializeField] private float spawnDistance = 2.0f;
-        [SerializeField] private Vector3 cubeScale = new Vector3(0.2f, 0.2f, 0.2f);
+        [SerializeField] private float spawnDistance = 5.0f;
+        [SerializeField] private Vector3 cubeScale = new Vector3(0.5f, 0.5f, 0.5f);
         [SerializeField] private Color cubeColor = Color.white;
 
         void Start()
         {
+            EnsureInteractorExists();
             SpawnCube();
+        }
+
+        private void EnsureInteractorExists()
+        {
+            // Search for both active and inactive objects
+            FlickGrabInteractor[] interactors = Object.FindObjectsByType<FlickGrabInteractor>(FindObjectsInactive.Include, FindObjectsSortMode.None);
+            
+            bool anyOnCamera = false;
+            foreach (var inter in interactors)
+            {
+                if (Camera.main != null && inter.gameObject == Camera.main.gameObject)
+                {
+                    anyOnCamera = true;
+                }
+            }
+
+            // In Editor, we ALWAYS want one on the Camera if we are simulating
+            if (Application.isEditor && !anyOnCamera)
+            {
+                SetupInteractorOnCamera();
+            }
+            else if (interactors.Length == 0)
+            {
+                SetupInteractorOnCamera();
+            }
+        }
+
+        private void SetupInteractorOnCamera()
+        {
+            if (Camera.main != null)
+            {
+                GameObject camObj = Camera.main.gameObject;
+                if (camObj.GetComponent<FlickGrabInteractor>() == null)
+                {
+                    camObj.AddComponent<FlickGrabInteractor>();
+                }
+            }
+            else
+            {
+                Debug.LogError("[FlickGrab] Could not find Main Camera to auto-setup FlickGrabInteractor.");
+            }
         }
 
         [ContextMenu("Spawn Now")]
@@ -31,12 +73,12 @@ namespace FlickGrab
             rb.interpolation = RigidbodyInterpolation.Interpolate;
             rb.collisionDetectionMode = CollisionDetectionMode.Continuous;
 
+            if (cube.GetComponent<Collider>() == null) cube.AddComponent<BoxCollider>();
+
             // Add XRI
             if (!cube.GetComponent<XRGrabInteractable>())
             {
-                var grab = cube.AddComponent<XRGrabInteractable>();
-                // Make it easy to grab
-                grab.movementType = XRBaseInteractable.MovementType.VelocityTracking;
+                cube.AddComponent<XRGrabInteractable>();
             }
 
             // Add Flick Grab logic
@@ -49,17 +91,21 @@ namespace FlickGrab
             Renderer renderer = cube.GetComponent<Renderer>();
             if (renderer != null)
             {
-                // Create a material that supports emission for the highlight
                 Shader shader = Shader.Find("Universal Render Pipeline/Lit");
                 if (shader == null) shader = Shader.Find("Standard");
                 
                 Material mat = new Material(shader);
                 mat.color = cubeColor;
+                if (mat.HasProperty("_BaseColor")) mat.SetColor("_BaseColor", cubeColor);
                 mat.EnableKeyword("_EMISSION");
+                mat.SetColor("_EmissionColor", Color.black);
                 renderer.material = mat;
             }
 
-            Debug.Log($"[FlickGrab] Spawned auto-configured cube at {cube.transform.position}");
+            // Ensure it's on a layer the interactor can hit (Default is usually 0)
+            cube.layer = 0;
+
+            Debug.Log($"[FlickGrab] Spawned cube at {cube.transform.position} on layer {LayerMask.LayerToName(cube.layer)}");
         }
     }
 }

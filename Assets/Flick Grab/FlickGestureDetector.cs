@@ -54,5 +54,12 @@ namespace FlickGrab
 
             return pullStrength > velocityThreshold && pullAcceleration > accelerationThreshold;
         }
+
+        public float GetPullStrength() => Vector3.Dot(averageVelocity, -transform.forward);
+        public float GetPullAcceleration()
+        {
+            Vector3 acceleration = (averageVelocity - lastAverageVelocity) / Time.deltaTime;
+            return Vector3.Dot(acceleration, -transform.forward);
+        }
     }
 }

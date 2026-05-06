@@ -12,36 +12,37 @@ namespace FlickGrab.Editor
 {
     public class FlickGrabSceneSetup : EditorWindow
     {
-        [MenuItem("Tools/Flick Grab/Setup Interactor")]
+        [MenuItem("Tools/Flick Grab/Setup Interactor (Both Hands)")]
         public static void SetupInteractor()
         {
-            XRRayInteractor ray = null;
+            XRRayInteractor[] rays = Object.FindObjectsByType<XRRayInteractor>(FindObjectsSortMode.None);
             
-            // Try Selection
-            if (Selection.activeGameObject != null)
+            if (rays.Length == 0)
             {
-                ray = Selection.activeGameObject.GetComponentInChildren<XRRayInteractor>();
-                if (ray == null) ray = Selection.activeGameObject.GetComponentInParent<XRRayInteractor>();
-            }
-            
-            // Fallback to finding in scene (prioritize Right hand)
-            if (ray == null)
-            {
-                XRRayInteractor[] rays = Object.FindObjectsByType<XRRayInteractor>(FindObjectsSortMode.None);
-                foreach (var r in rays)
-                {
-                    if (r.gameObject.name.ToLower().Contains("right")) { ray = r; break; }
-                }
-                if (ray == null && rays.Length > 0) ray = rays[0];
-            }
-
-            if (ray == null)
-            {
-                EditorUtility.DisplayDialog("Interactor Not Found", 
-                    "Could not find an XR Ray Interactor. Please select your Right Hand controller in the Hierarchy and try again.", "OK");
+                EditorUtility.DisplayDialog("Interactors Not Found", 
+                    "Could not find any XR Ray Interactors in the scene. Please ensure your XR Rig is set up correctly.", "OK");
                 return;
             }
 
+            int count = 0;
+            foreach (var ray in rays)
+            {
+                string handName = ray.gameObject.name.ToLower();
+                bool isRight = handName.Contains("right");
+                bool isLeft = handName.Contains("left");
+                
+                // If we can't tell by name, we might just set it up anyway if it's explicitly selected or if there's only one
+                if (!isRight && !isLeft && rays.Length == 1) isRight = true; // Default to right if only one
+
+                SetupHand(ray, isRight);
+                count++;
+            }
+            
+            Debug.Log($"[FlickGrab] Successfully setup {count} FlickGrabInteractors.");
+        }
+
+        private static void SetupHand(XRRayInteractor ray, bool isRight)
+        {
             GameObject handObj = ray.gameObject;
             Undo.RegisterCompleteObjectUndo(handObj, "Setup Flick Grab");
             
@@ -54,6 +55,37 @@ namespace FlickGrab.Editor
             so.FindProperty("directInteractor").objectReferenceValue = handObj.GetComponentInChildren<XRDirectInteractor>();
             so.FindProperty("handAnchor").objectReferenceValue = handObj.transform;
 
+            // Attempt to auto-assign Actions from XRI Default Input Actions
+            string side = isRight ? "RightHand" : "LeftHand";
+            
+            // Setup Activate
+            string[] activateGuids = AssetDatabase.FindAssets($"XRI {side} Activate t:InputActionReference");
+            if (activateGuids.Length > 0)
+            {
+                string path = AssetDatabase.GUIDToAssetPath(activateGuids[0]);
+                InputActionReference actionRef = AssetDatabase.LoadAssetAtPath<InputActionReference>(path);
+                so.FindProperty("activateAction").objectReferenceValue = actionRef;
+                Debug.Log($"[FlickGrab] Assigned Activate Action: {path}");
+            }
+            else
+            {
+                Debug.LogWarning($"[FlickGrab] Could not find Activate Action for {side}");
+            }
+
+            // Setup Thumbstick
+            string[] thumbstickGuids = AssetDatabase.FindAssets($"XRI {side} Move t:InputActionReference");
+            if (thumbstickGuids.Length > 0)
+            {
+                string path = AssetDatabase.GUIDToAssetPath(thumbstickGuids[0]);
+                InputActionReference actionRef = AssetDatabase.LoadAssetAtPath<InputActionReference>(path);
+                so.FindProperty("thumbstickAction").objectReferenceValue = actionRef;
+                Debug.Log($"[FlickGrab] Assigned Thumbstick Action: {path}");
+            }
+            else
+            {
+                Debug.LogWarning($"[FlickGrab] Could not find Thumbstick Action for {side}");
+            }
+
             // Setup LineRenderer for the beam
             LineRenderer line = handObj.GetComponent<LineRenderer>();
             if (!line)
@@ -61,16 +93,29 @@ namespace FlickGrab.Editor
                 line = handObj.AddComponent<LineRenderer>();
                 line.startWidth = 0.01f;
                 line.endWidth = 0.01f;
-                Shader shader = Shader.Find("Sprites/Default") ?? Shader.Find("Legacy Shaders/Transparent/Diffuse");
+                
+                // Try URP shader first, then fallback
+                Shader shader = Shader.Find("Universal Render Pipeline/Unlit") 
+                                ?? Shader.Find("Universal Render Pipeline/Lit")
+                                ?? Shader.Find("Sprites/Default") 
+                                ?? Shader.Find("Legacy Shaders/Transparent/Diffuse");
+                                
                 if (shader != null) line.material = new Material(shader);
-                line.startColor = Color.cyan;
-                line.endColor = Color.blue;
+                line.startColor = Color.red;
+                line.endColor = new Color(1, 0, 0, 0);
             }
             so.FindProperty("beamLine").objectReferenceValue = line;
 
             so.ApplyModifiedProperties();
             
-            Debug.Log($"[FlickGrab] Successfully setup FlickGrabInteractor on {handObj.name}. Ensure you assign the 'Activate Action' in the inspector!", handObj);
+            // Force save and mark dirty to ensure it persists in the inspector
+            EditorUtility.SetDirty(flickInteractor);
+            EditorUtility.SetDirty(handObj);
+            
+            if (line) EditorUtility.SetDirty(line);
+            if (detector) EditorUtility.SetDirty(detector);
+            
+            Debug.Log($"[FlickGrab] Setup FlickGrabInteractor on {handObj.name} (Side: {(isRight ? "Right" : "Left")})", handObj);
         }
 
         [MenuItem("Tools/Flick Grab/Make Selected Flick-Grabbable")]
@@ -107,49 +152,5 @@ namespace FlickGrab.Editor
             Debug.Log("[FlickGrab] Added Auto-Spawner to scene. It will spawn a cube in front of the camera on Start.");
         }
 
-        [MenuItem("Tools/Flick Grab/Add Debug Overlay")]
-        public static void AddDebugOverlay()
-        {
-            GameObject canvasObj = new GameObject("FlickGrabDebugCanvas");
-            Canvas canvas = canvasObj.AddComponent<Canvas>();
-            canvas.renderMode = RenderMode.WorldSpace;
-            canvasObj.AddComponent<CanvasScaler>();
-            canvasObj.AddComponent<GraphicRaycaster>();
-            
-            RectTransform rect = canvasObj.GetComponent<RectTransform>();
-            rect.sizeDelta = new Vector2(4, 3);
-            
-            // Position in front of camera
-            Transform cam = Camera.main != null ? Camera.main.transform : null;
-            if (cam != null)
-            {
-                canvasObj.transform.position = cam.position + cam.forward * 2f + cam.right * 1f;
-                canvasObj.transform.rotation = Quaternion.LookRotation(canvasObj.transform.position - cam.position);
-            }
-            else
-            {
-                canvasObj.transform.position = new Vector3(0.5f, 1.5f, 1.5f);
-            }
-            canvasObj.transform.localScale = Vector3.one * 0.5f;
-
-            GameObject textObj = new GameObject("LogText");
-            textObj.transform.SetParent(canvasObj.transform, false);
-            TextMeshProUGUI text = textObj.AddComponent<TextMeshProUGUI>();
-            text.fontSize = 0.15f;
-            text.alignment = TextAlignmentOptions.BottomLeft;
-            
-            RectTransform textRect = textObj.GetComponent<RectTransform>();
-            textRect.anchorMin = Vector2.zero;
-            textRect.anchorMax = Vector2.one;
-            textRect.sizeDelta = Vector2.zero;
-
-            FlickGrabDebugger debugger = canvasObj.AddComponent<FlickGrabDebugger>();
-            SerializedObject so = new SerializedObject(debugger);
-            so.FindProperty("logText").objectReferenceValue = text;
-            so.ApplyModifiedProperties();
-
-            Undo.RegisterCreatedObjectUndo(canvasObj, "Add Debug Overlay");
-            Debug.Log("[FlickGrab] Added Debug Overlay to scene.");
-        }
     }
 }

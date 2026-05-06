@@ -3,6 +3,7 @@ using UnityEngine.InputSystem;
 using UnityEngine.XR.Interaction.Toolkit;
 using UnityEngine.XR.Interaction.Toolkit.Interactors;
 using UnityEngine.XR.Interaction.Toolkit.Interactables;
+using UnityEngine.XR.Interaction.Toolkit.Attachment;
 
 namespace FlickGrab
 {
@@ -18,70 +19,115 @@ namespace FlickGrab
 
         [Header("Input")]
         [SerializeField] private InputActionReference activateAction;
+        [SerializeField] private InputActionReference thumbstickAction;
 
         [Header("Settings")]
-        [SerializeField] private float maxDistance = 10f;
-        [SerializeField] private LayerMask layerMask = -1;
+        [SerializeField] private float maxDistance = 20f;
+        [SerializeField] private float targetingRadius = 0.5f;
+        [SerializeField] private LayerMask layerMask = ~0; // Default to Everything
+        [SerializeField] private float flickThreshold = -0.5f;
 
         [Header("Components")]
         [SerializeField] private FlickGestureDetector gestureDetector;
         [SerializeField] private LineRenderer beamLine;
 
         private FlickGrabbable currentTarget;
-        private bool isButtonHeld;
 
-        private void OnEnable()
+        private void Awake()
         {
-            if (activateAction != null)
+            Debug.Log($"[FlickGrab] FlickGrabInteractor Awake on {gameObject.name}");
+        }
+
+        private void Start()
+        {
+            Debug.Log($"[FlickGrab] FlickGrabInteractor Start on {gameObject.name}");
+            ValidateFields();
+        }
+
+        private void ValidateFields()
+        {
+            if (rayInteractor == null)
             {
-                activateAction.action.Enable();
-                activateAction.action.performed += OnButtonPressed;
-                activateAction.action.canceled += OnButtonReleased;
+                rayInteractor = GetComponent<XRRayInteractor>();
+                if (rayInteractor != null) Debug.Log($"[FlickGrab] {gameObject.name}: rayInteractor was null, found on object via GetComponent.");
+                else Debug.LogError($"[FlickGrab] {gameObject.name}: rayInteractor is MISSING!");
+            }
+
+            if (gestureDetector == null)
+            {
+                gestureDetector = GetComponent<FlickGestureDetector>();
+                if (gestureDetector == null) Debug.LogWarning($"[FlickGrab] {gameObject.name}: gestureDetector is null!");
+            }
+
+            if (beamLine == null)
+            {
+                beamLine = GetComponent<LineRenderer>();
+                if (beamLine != null) Debug.Log($"[FlickGrab] {gameObject.name}: beamLine was null, found on object via GetComponent.");
+                else Debug.LogError($"[FlickGrab] {gameObject.name}: beamLine is MISSING!");
+            }
+
+            if (handAnchor == null)
+            {
+                // Fallback to RayInteractor's attach transform or transform
+                if (rayInteractor != null && rayInteractor.rayOriginTransform != null) handAnchor = rayInteractor.rayOriginTransform;
+                else handAnchor = transform;
+                Debug.Log($"[FlickGrab] {gameObject.name}: handAnchor is null, using {handAnchor.name}.");
+            }
+            
+            if (thumbstickAction == null || thumbstickAction.action == null) 
+            {
+                Debug.LogWarning($"[FlickGrab] {gameObject.name}: thumbstickAction is null, joystick flick disabled.");
             }
             else
             {
-                Debug.LogWarning("[FlickGrab] Activate Action is not assigned on FlickGrabInteractor!");
+                Debug.Log($"[FlickGrab] {gameObject.name}: thumbstickAction is VALID ({thumbstickAction.action.name}).");
+            }
+        }
+
+        private void OnEnable()
+        {
+            if (thumbstickAction != null && thumbstickAction.action != null)
+            {
+                thumbstickAction.action.Enable();
             }
         }
 
         private void OnDisable()
         {
-            if (activateAction != null)
-            {
-                activateAction.action.performed -= OnButtonPressed;
-                activateAction.action.canceled -= OnButtonReleased;
-            }
-        }
-
-        private void OnButtonPressed(InputAction.CallbackContext context)
-        {
-            isButtonHeld = true;
-            Debug.Log("[FlickGrab] Button Pressed");
-        }
-
-        private void OnButtonReleased(InputAction.CallbackContext context)
-        {
-            isButtonHeld = false;
-            Debug.Log("[FlickGrab] Button Released");
         }
 
         private void Update()
         {
-            if (!isButtonHeld)
-            {
-                if (currentTarget != null) Debug.Log("[FlickGrab] Button released, clearing target.");
-                ClearTarget();
-                UpdateBeam(false, Vector3.zero);
-                return;
-            }
-
             PerformRaycast();
+
+            if (Application.isEditor)
+            {
+                HandleEditorInput();
+            }
 
             if (currentTarget != null && !currentTarget.IsFlying)
             {
-                if (gestureDetector != null && gestureDetector.IsFlicking())
+                bool triggerFlick = false;
+
+                // Check Joystick
+                if (thumbstickAction != null && thumbstickAction.action != null)
                 {
-                    Debug.Log("[FlickGrab] Flick gesture detected!");
+                    Vector2 stickValue = thumbstickAction.action.ReadValue<Vector2>();
+                    // Allow both horizontal and vertical flick for more leeway in editor/VR
+                    if (stickValue.y < flickThreshold || Mathf.Abs(stickValue.x) > 0.7f)
+                    {
+                        triggerFlick = true;
+                    }
+                }
+
+                // Check Gesture (keeping it as fallback or secondary)
+                if (!triggerFlick && gestureDetector != null && gestureDetector.IsFlicking())
+                {
+                    triggerFlick = true;
+                }
+
+                if (triggerFlick)
+                {
                     TriggerFlick();
                 }
             }
@@ -89,31 +135,98 @@ namespace FlickGrab
 
         private void PerformRaycast()
         {
-            // Use the interactor's forward as the ray direction
-            Ray ray = new Ray(transform.position, transform.forward);
-            if (Physics.Raycast(ray, out RaycastHit hit, maxDistance, layerMask))
+            Transform origin = transform;
+            
+            if (rayInteractor != null)
             {
-                FlickGrabbable grabbable = hit.collider.GetComponentInParent<FlickGrabbable>();
-                if (grabbable != null && !grabbable.IsFlying)
+                origin = rayInteractor.transform;
+            }
+
+            // In editor fallback
+            if (Application.isEditor)
+            {
+                if (Camera.main != null)
                 {
-                    if (currentTarget != grabbable)
+                    if (gameObject == Camera.main.gameObject)
                     {
-                        Debug.Log($"[FlickGrab] Raycast hit new target: {grabbable.name}");
-                        ClearTarget();
-                        currentTarget = grabbable;
-                        currentTarget.SetHighlight(true);
+                        origin = transform;
                     }
-                    UpdateBeam(true, hit.point);
-                    return;
+                    else if (transform.position.sqrMagnitude < 0.001f)
+                    {
+                        origin = Camera.main.transform;
+                    }
                 }
             }
 
-            if (currentTarget != null)
+            Ray ray = new Ray(origin.position, origin.forward);
+            Debug.DrawRay(ray.origin, ray.direction * maxDistance, Color.red);
+
+            // Use SphereCastAll to find all potential targets
+            RaycastHit[] hits = Physics.SphereCastAll(ray, targetingRadius, maxDistance, layerMask, QueryTriggerInteraction.Ignore);
+
+            // Sort hits by distance
+            System.Array.Sort(hits, (a, b) => a.distance.CompareTo(b.distance));
+
+            FlickGrabbable foundGrabbable = null;
+            Vector3 hitPoint = origin.position + origin.forward * maxDistance;
+
+            foreach (var h in hits)
             {
-                Debug.Log("[FlickGrab] Raycast lost target.");
-                ClearTarget();
+                // FIND GRABBABLE
+                FlickGrabbable grabbable = h.collider.GetComponentInParent<FlickGrabbable>();
+                
+                // IF NO GRABBABLE, FILTER OUT RIG PARTS
+                if (grabbable == null)
+                {
+                    Transform t = h.transform;
+                    bool isSelf = (t == transform || t.IsChildOf(transform) || transform.IsChildOf(t));
+                    
+                    if (!isSelf && rayInteractor != null)
+                    {
+                        Transform rt = rayInteractor.transform;
+                        if (t == rt || t.IsChildOf(rt) || rt.IsChildOf(t)) isSelf = true;
+                    }
+
+                    if (isSelf) continue;
+
+                    // Skip common rig parts that might block the ray at 0m
+                    string n = h.collider.name.ToLower();
+                    if (n.Contains("xr") || n.Contains("rig") || n.Contains("origin") || n.Contains("hand") || n.Contains("camera") || h.distance < 0.05f)
+                        continue;
+                    
+                    // If we hit some solid environment object (like a wall) BEFORE a grabbable, we should probably stop.
+                    // But for now let's keep it simple and see if we can find any grabbable in the sphere.
+                    continue; 
+                }
+
+                // VALID TARGET FOUND
+                if (!grabbable.IsFlying)
+                {
+                    foundGrabbable = grabbable;
+                    // Ensure beam end is at least 0.5m away so it's visible
+                    hitPoint = (h.distance > 0.5f) ? h.point : (origin.position + origin.forward * 0.5f);
+                    break;
+                }
             }
-            UpdateBeam(false, Vector3.zero);
+            
+            if (foundGrabbable != null)
+            {
+                if (currentTarget != foundGrabbable)
+                {
+                    ClearTarget();
+                    currentTarget = foundGrabbable;
+                    currentTarget.SetHighlight(true);
+                }
+                UpdateBeam(true, hitPoint);
+            }
+            else
+            {
+                if (currentTarget != null)
+                {
+                    ClearTarget();
+                }
+                UpdateBeam(false, Vector3.zero);
+            }
         }
 
         private void TriggerFlick()
@@ -153,11 +266,63 @@ namespace FlickGrab
         private void UpdateBeam(bool active, Vector3 endPoint)
         {
             if (beamLine == null) return;
-            beamLine.enabled = active;
+            
+            // In many VR setups, the beam should always be visible but change color
+            // or we only show it when it hits something. Let's make it always visible
+            // to provide feedback that the script is at least trying to draw something.
+            beamLine.enabled = true;
+            
+            Transform origin = transform;
+            if (rayInteractor != null)
+            {
+                origin = rayInteractor.transform;
+            }
+            
+            // In editor, match the raycast origin logic
+            if (Application.isEditor)
+            {
+                if (gameObject == (Camera.main != null ? Camera.main.gameObject : null))
+                {
+                    origin = transform;
+                }
+                else if (Camera.main != null && transform.position.sqrMagnitude < 0.001f)
+                {
+                    origin = Camera.main.transform;
+                }
+            }
+
+            beamLine.SetPosition(0, origin.position);
+            
             if (active)
             {
-                beamLine.SetPosition(0, transform.position);
                 beamLine.SetPosition(1, endPoint);
+                beamLine.startColor = Color.cyan;
+                beamLine.endColor = Color.cyan;
+                // Force material color for some shaders
+                if (beamLine.material.HasProperty("_BaseColor")) beamLine.material.SetColor("_BaseColor", Color.cyan);
+                else if (beamLine.material.HasProperty("_Color")) beamLine.material.SetColor("_Color", Color.cyan);
+            }
+            else
+            {
+                beamLine.SetPosition(1, origin.position + origin.forward * maxDistance);
+                beamLine.startColor = Color.red; // Red means no target
+                beamLine.endColor = new Color(1, 0, 0, 0); // Fade to transparent
+                // Force material color
+                if (beamLine.material.HasProperty("_BaseColor")) beamLine.material.SetColor("_BaseColor", Color.red);
+                else if (beamLine.material.HasProperty("_Color")) beamLine.material.SetColor("_Color", Color.red);
+            }
+        }
+
+        private void HandleEditorInput()
+        {
+            var keyboard = UnityEngine.InputSystem.Keyboard.current;
+            if (keyboard != null)
+            {
+                if (keyboard.spaceKey.wasPressedThisFrame || keyboard.sKey.wasPressedThisFrame)
+                {
+                    Debug.Log($"[FlickGrab] [Editor] Key Pressed on {gameObject.name} - Simulating Flick");
+                    TriggerFlick();
+                }
             }
         }
     }
