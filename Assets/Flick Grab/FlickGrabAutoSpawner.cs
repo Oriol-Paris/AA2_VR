@@ -19,7 +19,10 @@ namespace FlickGrab
         {
             GameObject cube = GameObject.CreatePrimitive(PrimitiveType.Cube);
             cube.name = "FlickGrabbableCube";
-            
+
+            // 👉 AÑADIDO: asignar tag
+            cube.tag = "Weapon";
+
             // Position it in front of the spawner or camera
             Transform spawnRoot = Camera.main != null ? Camera.main.transform : transform;
             cube.transform.position = spawnRoot.position + (spawnRoot.forward * spawnDistance);
@@ -35,7 +38,6 @@ namespace FlickGrab
             if (!cube.GetComponent<XRGrabInteractable>())
             {
                 var grab = cube.AddComponent<XRGrabInteractable>();
-                // Make it easy to grab
                 grab.movementType = XRBaseInteractable.MovementType.VelocityTracking;
             }
 
@@ -49,10 +51,9 @@ namespace FlickGrab
             Renderer renderer = cube.GetComponent<Renderer>();
             if (renderer != null)
             {
-                // Create a material that supports emission for the highlight
                 Shader shader = Shader.Find("Universal Render Pipeline/Lit");
                 if (shader == null) shader = Shader.Find("Standard");
-                
+
                 Material mat = new Material(shader);
                 mat.color = cubeColor;
                 mat.EnableKeyword("_EMISSION");
