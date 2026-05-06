@@ -3,8 +3,7 @@ using UnityEngine;
 using UnityEngine.XR.Interaction.Toolkit;
 using UnityEngine.XR.Interaction.Toolkit.Interactors;
 using FlickGrab;
-using UnityEngine.SceneManagement;
-using UnityEditor.SceneManagement;
+using Unity.XR.CoreUtils;
 
 public class FlickGrabSceneSetup : EditorWindow
 {
@@ -27,55 +26,91 @@ public class FlickGrabSceneSetup : EditorWindow
         {
             MakeSelectedGrabbable();
         }
+
+        if (GUILayout.Button("Add Spawner to Scene"))
+        {
+            AddSpawner();
+        }
         
-        EditorGUILayout.HelpBox("1. Open the FlickGrabDemo scene.\n2. Click 'Setup Interactor' to add components to your XR Origin.\n3. Select any cubes/spheres and click 'Make Flick-Grabbable'.", MessageType.Info);
+        EditorGUILayout.HelpBox("1. Open the FlickGrabDemo scene.\n2. Click 'Setup Interactor' to add components to your XR Origin.\n3. Select any objects and click 'Make Flick-Grabbable'.\n4. Use 'Add Spawner' to spawn items by pressing 'A' in VR.", MessageType.Info);
+    }
+
+    private void AddSpawner()
+    {
+        GameObject spawnerObj = new GameObject("FlickGrabbableSpawner");
+        spawnerObj.transform.position = Vector3.zero;
+        FlickGrabbableSpawner spawner = spawnerObj.AddComponent<FlickGrabbableSpawner>();
+        
+        // Try to auto-link the spawner to the XR Origin for position
+        var origin = Object.FindFirstObjectByType<XROrigin>();
+        if (origin != null)
+        {
+            spawnerObj.transform.SetParent(origin.transform);
+            spawnerObj.transform.localPosition = Vector3.zero;
+        }
+
+        Undo.RegisterCreatedObjectUndo(spawnerObj, "Add Flick Grabbable Spawner");
+        Selection.activeGameObject = spawnerObj;
+        
+        Debug.Log("[FlickGrab] Added Spawner to scene. Don't forget to assign the 'Spawn Action' (e.g., PrimaryButton) in the Inspector!");
     }
 
     private void SetupInteractor()
     {
-        XRRayInteractor ray = Selection.activeGameObject?.GetComponentInChildren<XRRayInteractor>();
+        XRRayInteractor ray = null;
+        
+        // 1. Try Selection
+        if (Selection.activeGameObject != null)
+        {
+            ray = Selection.activeGameObject.GetComponentInChildren<XRRayInteractor>();
+            if (ray == null) ray = Selection.activeGameObject.GetComponentInParent<XRRayInteractor>();
+        }
+        
+        // 2. Fallback to finding in scene
         if (ray == null)
         {
-            ray = Object.FindFirstObjectByType<XRRayInteractor>();
+            XRRayInteractor[] rays = Object.FindObjectsByType<XRRayInteractor>(FindObjectsSortMode.None);
+            foreach (var r in rays)
+            {
+                if (r.gameObject.name.ToLower().Contains("right"))
+                {
+                    ray = r;
+                    break;
+                }
+            }
+            if (ray == null && rays.Length > 0) ray = rays[0];
         }
 
         if (ray == null)
         {
-            Debug.LogError("Could not find an XR Ray Interactor in the scene. Please select the Right Hand controller or an XR Origin.");
+            EditorUtility.DisplayDialog("Interactor Not Found", 
+                "Could not find an XR Ray Interactor. Please select your Right Hand controller in the Hierarchy and try again.", "OK");
             return;
         }
 
         GameObject handObj = ray.gameObject;
+        Undo.RegisterCompleteObjectUndo(handObj, "Setup Flick Grab Interactor");
         
-        // Add GestureDetector
-        if (!handObj.GetComponent<FlickGestureDetector>())
-            handObj.AddComponent<FlickGestureDetector>();
+        FlickGestureDetector detector = handObj.GetComponent<FlickGestureDetector>() ?? handObj.AddComponent<FlickGestureDetector>();
+        FlickGrabInteractor flickInteractor = handObj.GetComponent<FlickGrabInteractor>() ?? handObj.AddComponent<FlickGrabInteractor>();
 
-        // Add FlickGrabInteractor
-        FlickGrabInteractor flickInteractor = handObj.GetComponent<FlickGrabInteractor>();
-        if (!flickInteractor)
-            flickInteractor = handObj.AddComponent<FlickGrabInteractor>();
-
-        // Link references via Reflection or SerializedObject since they are private
         SerializedObject so = new SerializedObject(flickInteractor);
         so.FindProperty("rayInteractor").objectReferenceValue = ray;
-        so.FindProperty("gestureDetector").objectReferenceValue = handObj.GetComponent<FlickGestureDetector>();
+        so.FindProperty("gestureDetector").objectReferenceValue = detector;
         
-        // Try to find a direct interactor on same object
-        XRDirectInteractor direct = handObj.GetComponent<XRDirectInteractor>();
+        XRDirectInteractor direct = handObj.GetComponentInChildren<XRDirectInteractor>();
         if (direct) so.FindProperty("directInteractor").objectReferenceValue = direct;
         
-        // Set hand anchor
         so.FindProperty("handAnchor").objectReferenceValue = handObj.transform;
 
-        // Add a line renderer for the beam if missing
         LineRenderer line = handObj.GetComponent<LineRenderer>();
         if (!line)
         {
             line = handObj.AddComponent<LineRenderer>();
             line.startWidth = 0.01f;
             line.endWidth = 0.01f;
-            line.material = new Material(Shader.Find("Sprites/Default"));
+            Shader shader = Shader.Find("Sprites/Default") ?? Shader.Find("Legacy Shaders/Transparent/Diffuse");
+            if (shader != null) line.material = new Material(shader);
             line.startColor = Color.cyan;
             line.endColor = Color.blue;
         }
@@ -83,13 +118,17 @@ public class FlickGrabSceneSetup : EditorWindow
 
         so.ApplyModifiedProperties();
         
-        Debug.Log($"Successfully setup FlickGrabInteractor on {handObj.name}");
+        EditorUtility.SetDirty(flickInteractor);
+        EditorUtility.SetDirty(handObj);
+        
+        Debug.Log($"[FlickGrab] Successfully setup FlickGrabInteractor on {handObj.name}", handObj);
     }
 
     private void MakeSelectedGrabbable()
     {
         foreach (GameObject obj in Selection.gameObjects)
         {
+            Undo.RecordObject(obj, "Make Flick-Grabbable");
             if (!obj.GetComponent<Rigidbody>()) obj.AddComponent<Rigidbody>();
             if (!obj.GetComponent<UnityEngine.XR.Interaction.Toolkit.Interactables.XRGrabInteractable>()) 
                 obj.AddComponent<UnityEngine.XR.Interaction.Toolkit.Interactables.XRGrabInteractable>();
@@ -97,6 +136,7 @@ public class FlickGrabSceneSetup : EditorWindow
             if (!obj.GetComponent<FlickGrabbable>())
                 obj.AddComponent<FlickGrabbable>();
             
+            EditorUtility.SetDirty(obj);
             Debug.Log($"Made {obj.name} Flick-Grabbable");
         }
     }
