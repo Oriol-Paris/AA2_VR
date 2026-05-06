@@ -1,0 +1,2 @@
+C:\Users\Oriol\RiderProjects\AA2_VR\Library\Bee\Android\Prj\IL2CPP\Gradle\unityLibrary\src\main\cpp\CMakeLists.txt
+C:\Users\Oriol\RiderProjects\AA2_VR\Library\Bee\Android\Prj\IL2CPP\Gradle\unityLibrary\src\main\cpp\GameActivity\CMakeLists.txt
