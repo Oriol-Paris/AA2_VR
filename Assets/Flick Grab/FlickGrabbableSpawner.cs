@@ -50,13 +50,21 @@ public class FlickGrabbableSpawner : MonoBehaviour
         // Set material to something that supports emission
         Renderer rend = cube.GetComponent<Renderer>();
         // Use a more robust way to find a shader that likely exists in the project
-        Shader standardShader = Shader.Find("Standard");
-        if (standardShader == null) standardShader = Shader.Find("Universal Render Pipeline/Lit");
+        Shader standardShader = Shader.Find("Universal Render Pipeline/Lit");
+        if (standardShader == null) standardShader = Shader.Find("Standard");
         
         if (standardShader != null)
         {
             rend.material = new Material(standardShader);
-            rend.material.EnableKeyword("_EMISSION");
+            if (standardShader.name.Contains("Universal Render Pipeline"))
+            {
+                rend.material.SetColor("_EmissionColor", Color.black);
+                rend.material.EnableKeyword("_EMISSION");
+            }
+            else
+            {
+                rend.material.EnableKeyword("_EMISSION");
+            }
         }
         
         Debug.Log("Spawned a Flick-Grabbable Cube at " + cube.transform.position);

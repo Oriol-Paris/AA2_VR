@@ -61,6 +61,7 @@ namespace FlickGrab
         {
             if (isHighlighted == active) return;
             isHighlighted = active;
+            Debug.Log($"[FlickGrab] SetHighlight: {active} on {name}");
 
             if (pulseCoroutine != null) StopCoroutine(pulseCoroutine);
             if (active) pulseCoroutine = StartCoroutine(PulseRoutine());

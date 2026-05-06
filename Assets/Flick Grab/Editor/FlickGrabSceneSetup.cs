@@ -4,6 +4,7 @@ using UnityEngine.XR.Interaction.Toolkit;
 using UnityEngine.XR.Interaction.Toolkit.Interactors;
 using FlickGrab;
 using Unity.XR.CoreUtils;
+using UnityEngine.InputSystem;
 
 public class FlickGrabSceneSetup : EditorWindow
 {
@@ -102,6 +103,32 @@ public class FlickGrabSceneSetup : EditorWindow
         if (direct) so.FindProperty("directInteractor").objectReferenceValue = direct;
         
         so.FindProperty("handAnchor").objectReferenceValue = handObj.transform;
+
+        // Try to find default activate action
+        if (so.FindProperty("activateAction").objectReferenceValue == null)
+        {
+            var actionAssets = AssetDatabase.FindAssets("XRI Default Input Actions t:InputActionAsset");
+            if (actionAssets.Length > 0)
+            {
+                string path = AssetDatabase.GUIDToAssetPath(actionAssets[0]);
+                InputActionAsset asset = AssetDatabase.LoadAssetAtPath<InputActionAsset>(path);
+                var action = asset.FindAction("XRI RightHand/Interaction/Activate");
+                if (action != null)
+                {
+                    // Note: InputActionReference is what the field expects
+                    var references = AssetDatabase.FindAssets("t:InputActionReference");
+                    foreach (var guid in references)
+                    {
+                        var reference = AssetDatabase.LoadAssetAtPath<InputActionReference>(AssetDatabase.GUIDToAssetPath(guid));
+                        if (reference.action.id == action.id)
+                        {
+                            so.FindProperty("activateAction").objectReferenceValue = reference;
+                            break;
+                        }
+                    }
+                }
+            }
+        }
 
         LineRenderer line = handObj.GetComponent<LineRenderer>();
         if (!line)

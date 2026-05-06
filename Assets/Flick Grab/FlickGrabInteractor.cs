@@ -83,6 +83,7 @@ namespace FlickGrab
                 {
                     if (currentTarget != grabbable)
                     {
+                        Debug.Log($"[FlickGrab] Raycast hit: {grabbable.name}");
                         ClearTarget();
                         currentTarget = grabbable;
                         lastValidTarget = grabbable;
