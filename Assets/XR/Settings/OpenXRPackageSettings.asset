@@ -814,7 +814,7 @@ MonoBehaviour:
   company: Unity Technologies
   priority: 0
   required: 0
-  m_EnableHandRemoval: 1
+  m_EnableHandRemoval: 0
 --- !u!114 &-2800899593012572141
 MonoBehaviour:
   m_ObjectHideFlags: 0
