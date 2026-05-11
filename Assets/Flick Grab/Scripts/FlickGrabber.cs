@@ -10,7 +10,7 @@ namespace FlickGrab
     public class FlickGrabber : MonoBehaviour
     {
         [SerializeField] private string grabbableTag = "Grabbable";
-        [SerializeField] private float maxDistance = 10f;
+        [SerializeField] private float maxDistance = 100000f;
         [SerializeField] private LayerMask layerMask = -1;
         [SerializeField] private InputActionReference grabAction;
 
