@@ -21,6 +21,7 @@ namespace FlickGrab
         {
             PerformRaycast();
             CheckInput();
+            FindAnyObjectByType<FlickGrabbable>().GetComponent<MeshRenderer>().material.color = Color.blue;
         }
 
         /// <summary>
