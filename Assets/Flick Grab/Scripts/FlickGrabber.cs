@@ -33,7 +33,9 @@ namespace FlickGrab
             {
                 if (hit.collider.CompareTag(grabbableTag))
                 {
-                    IFlickGrabbable grabbable = hit.collider.GetComponentInParent<IFlickGrabbable>();
+                    hit.collider.GetComponent<MeshRenderer>().material.color = Color.blue;
+                    
+                    /*IFlickGrabbable grabbable = hit.collider.GetComponentInParent<IFlickGrabbable>();
                     
                     if (grabbable == null)
                     {
@@ -50,7 +52,7 @@ namespace FlickGrab
                             currentTarget.OnPointerEnter();
                         }
                         return;
-                    }
+                    }*/
                 }
             }
 
