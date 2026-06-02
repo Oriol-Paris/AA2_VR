@@ -4,40 +4,29 @@ using UnityEngine.XR.Interaction.Toolkit.Interactables;
 
 namespace VRInventory
 {
- 
     [RequireComponent(typeof(Rigidbody))]
     [RequireComponent(typeof(XRGrabInteractable))]
     public class InventoryItem : MonoBehaviour
     {
-
-
-        [Header("─── Inventario ───")]
         [SerializeField] private string itemTag = "Weapon";
 
-  
-       
-
-        public string        ItemTag   => itemTag;
-        public bool          IsSlotted => currentSlot != null;
+        public string ItemTag   => itemTag;
+        public bool IsSlotted => currentSlot != null;
         public InventorySlot CurrentSlot => currentSlot;
 
-      
-
         private XRGrabInteractable grabInteractable;
-        private Rigidbody          rb;
+        private Rigidbody rb;
 
         private InventorySlot currentSlot;       
         private InventorySlot nearestReadySlot;  
 
         private bool isBeingHeld;
         private bool savedKinematic;             
-
-       
-
+        
         private void Awake()
         {
             grabInteractable = GetComponent<XRGrabInteractable>();
-            rb               = GetComponent<Rigidbody>();
+            rb = GetComponent<Rigidbody>();
 
             grabInteractable.selectEntered.AddListener(OnGrabbed);
             grabInteractable.selectExited.AddListener(OnReleased);
@@ -46,13 +35,13 @@ namespace VRInventory
         private void OnDestroy()
         {
             if (grabInteractable == null) return;
+            
             grabInteractable.selectEntered.RemoveListener(OnGrabbed);
             grabInteractable.selectExited.RemoveListener(OnReleased);
         }
 
         private void Update()
         {
-            
             if (isBeingHeld)
                 UpdateNearestSlot();
         }
@@ -61,8 +50,8 @@ namespace VRInventory
 
         private void UpdateNearestSlot()
         {
-            InventorySlot best     = null;
-            float         bestDist = float.MaxValue;
+            InventorySlot best = null;
+            float bestDist = float.MaxValue;
 
             foreach (var slot in InventorySlot.AllSlots)
             {
@@ -71,7 +60,7 @@ namespace VRInventory
                 float dist = Vector3.Distance(transform.position, slot.transform.position);
                 if (dist < slot.SnapRadius && dist < bestDist)
                 {
-                    best     = slot;
+                    best = slot;
                     bestDist = dist;
                 }
             }
@@ -89,13 +78,11 @@ namespace VRInventory
         private void OnGrabbed(SelectEnterEventArgs args)
         {
             isBeingHeld = true;
-
-           
+            
             if (currentSlot != null)
             {
                 currentSlot.UnslotCurrentItem();
                 currentSlot = null;
-
                 
                 rb.isKinematic = savedKinematic;
 
@@ -106,21 +93,18 @@ namespace VRInventory
         private void OnReleased(SelectExitEventArgs args)
         {
             isBeingHeld = false;
-
-           
+            
             nearestReadySlot?.SetReadyHighlight(false);
 
             if (nearestReadySlot != null)
             {
-               
                 savedKinematic = rb.isKinematic;
-
                
-                rb.isKinematic    = true;
+                rb.isKinematic = true;
                 rb.linearVelocity = Vector3.zero;
                 rb.angularVelocity = Vector3.zero;
 
-                currentSlot       = nearestReadySlot;
+                currentSlot = nearestReadySlot;
                 nearestReadySlot  = null;
 
                 currentSlot.SlotItem(this);
@@ -128,23 +112,9 @@ namespace VRInventory
             }
             else
             {
-               
                 nearestReadySlot = null;
                 Debug.Log($"[Inventory] {name} soltado sin slot cercano.");
             }
         }
-
-       
-
-#if UNITY_EDITOR
-        private void OnDrawGizmosSelected()
-        {
-            UnityEditor.Handles.color = new Color(1f, 0.8f, 0.2f, 0.8f);
-            UnityEditor.Handles.Label(
-                transform.position + Vector3.up * 0.12f,
-                $"Item Tag: \"{itemTag}\""
-            );
-        }
-#endif
     }
 }
