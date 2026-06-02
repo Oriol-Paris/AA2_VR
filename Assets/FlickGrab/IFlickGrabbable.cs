@@ -1,25 +1,31 @@
-﻿using UnityEngine;
+using UnityEngine;
 
 namespace FlickGrab
 {
     /// <summary>
-    /// Interface for grabbable objects
+    /// Interface for grabbable objects.
     /// </summary>
     public interface IFlickGrabbable
     {
-        /// <summary>
-        /// Is called when the controller pointer is on the object
-        /// </summary>
+        /// <summary>Called when the controller ray enters the object.</summary>
         void OnPointerEnter();
 
-        /// <summary>
-        /// Is called when the controller pointer exits the object
-        /// </summary>
+        /// <summary>Called when the controller ray exits the object.</summary>
         void OnPointerExit();
 
-        /// <summary>
-        /// Starts the movement towards the desired hand
-        /// </summary>
+        /// <summary>Trigger held while pointing — pulse to signal "flick me".</summary>
+        void OnAimStart();
+
+        /// <summary>Trigger released or ray left the object — cancel aim feedback.</summary>
+        void OnAimCancel();
+
+        /// <summary>Flick confirmed — object starts flying to the hand.</summary>
         void OnFlickGrab(Transform handTransform);
+
+        /// <summary>True once the object has arrived and is parented to the hand.</summary>
+        bool IsInHand { get; }
+
+        /// <summary>Detaches the object from the hand and restores physics.</summary>
+        void Release(Vector3 throwVelocity);
     }
 }
