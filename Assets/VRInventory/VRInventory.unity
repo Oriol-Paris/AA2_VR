@@ -2123,9 +2123,9 @@ Transform:
   m_GameObject: {fileID: 1428947903}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: -3.099, y: 1.509, z: 0.025}
-  m_LocalScale: {x: 2.1127725, y: 2.1127725, z: 2.1127725}
-  m_ConstrainProportionsScale: 0
+  m_LocalPosition: {x: -2.22, y: 1.29, z: 0.025}
+  m_LocalScale: {x: 0.39, y: 0.39, z: 0.39}
+  m_ConstrainProportionsScale: 1
   m_Children: []
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
@@ -2924,8 +2924,6 @@ MonoBehaviour:
   occupiedColor: {r: 0.4, g: 0.4, b: 0.4, a: 0.12}
   ringRadius: 0.07
   ringSegments: 48
-  slotLabel: Slot
-  gizmoColor: {r: 0, g: 0.7999997, b: 1, a: 1}
 --- !u!114 &1871562524 stripped
 MonoBehaviour:
   m_CorrespondingSourceObject: {fileID: 8596793768576461366, guid: b6d57cedc6a73c94aad8ce006a26b41b, type: 3}
